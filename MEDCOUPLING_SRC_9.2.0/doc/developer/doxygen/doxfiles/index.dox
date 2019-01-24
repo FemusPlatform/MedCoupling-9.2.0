@@ -1,0 +1,57 @@
+/*!
+
+\mainpage Welcome to MEDCoupling!
+
+The MEDCoupling tool gathers several powerful functionalities around the input and output data of
+simulation codes (meshes and fields mainly).
+
+\image html projectionHQ_600.png "Example of a field interpolation between two 3D surfacic meshes"
+
+The most common usage is to write dedicated code (C++ or Python) linking to the library. However a graphical user interface is also available; for this please refer to the MED module documentation.
+
+- If you don't know where to start, reading the \ref start "getting started" section and then
+taking a look at the <a class="el" href="tutorial/index.html">tutorial</a> is probably a good way to go.
+- If you are looking for a very specific point (how can I build a mesh from scratch,
+ how do I write my data to a file, etc ...), taking a look at the \ref faq "FAQ" or at the numerous
+ \ref examples "code examples" might help.
+- Finally people looking for the reference documentation of a given function (in C++ or Python) should
+take a look at the \ref ParaMEDMEM "API documentation". Only the C++ functions are documented, but
+the Python API has been designed to be used in a very similar fashion, provided you are aware of the
+\ref python-api "conventions used".
+
+\section contents Contents
+This documentation is organized as follows:
+- \ref index (this page!)
+- \ref faq
+- \ref start
+    - \ref intro-start
+    - \ref terminology
+    - \ref library
+    - \ref functionalities
+    - \ref python-api
+- <a class="el" href="tutorial/index.html">Tutorial - MEDCoupling/MEDLoader in Python</a>
+- \ref reference
+    - \ref medcoupling
+    - \ref medloader
+    - \ref interpolation
+    - \ref cpp
+    - \ref distrib
+    - \ref misc
+  \if ENABLE_EXAMPLES
+- \ref examples
+    - \ref medcouplingpyexamples
+    - \ref medcouplingcppexamples
+  \endif
+
+- \ref appendix
+    - \ref porting
+    - \ref glossary
+    - \ref med-file
+    - \ref install
+
+- \ref MEDCoupling "MEDCoupling, MEDLoader (and other parallel classes) API documentation"
+
+*/
+
+
+

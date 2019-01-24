@@ -1,0 +1,369 @@
+#!/usr/bin/env python
+#  -*- coding: utf8 -*-
+
+# Copyright (C) 2017  CEA/DEN, EDF R&D
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License Version 3 as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, you may download a copy of license
+# from https://www.gnu.org/licenses/gpl-3.0.
+
+"""
+Command line tool to insert copyright notice to a file.
+Usage: type "insert_copyright --help" to learn how to use tool.
+"""
+
+import argparse
+import os
+import re
+import sys
+import time
+
+# pragma pylint: disable=redefined-builtin
+
+# -----------------------------------------------------------------------------
+_COMMENTS = {
+    'cpp': '//',
+    'shell': '#',
+    'python': '#',
+    'auto': None,
+    }
+
+_OWNERS = {
+    'cea': 'CEA/DEN',
+    'edf': 'EDF R&D',
+    'occ': 'OPEN CASCADE'
+    }
+
+
+# -----------------------------------------------------------------------------
+def error_exit(msg):
+    """
+    Print error message to stderr and exit.
+
+    Arguments:
+        msg (str): Error message.
+    """
+    sys.stderr.write("ERROR: {}\n".format(msg))
+    sys.exit(-1)
+
+
+# -----------------------------------------------------------------------------
+def warning(msg):
+    """
+    Print wating message to stderr.
+
+    Arguments:
+        msg (str): Warning message.
+    """
+    sys.stderr.write("WARNING: {}\n".format(msg))
+
+
+# -----------------------------------------------------------------------------
+def formats():
+    """
+    Get supported formats of comments.
+
+    Returns:
+        list[str]: List of formats.
+    """
+    return list(_COMMENTS)
+
+
+# -----------------------------------------------------------------------------
+def search_line(lines, rex, depth=1):
+    """
+    Search regexp in given lines.
+
+    Arguments:
+        lines (list[str]): List of strings.
+        regex (str): Regular expression.
+        depth (Optional[int]): Depth of search. Defaults to 1 line.
+
+    Returns:
+        int: Index of first matched line.
+    """
+    for i in range(depth if depth >= 0 else len(lines)):
+        if i < len(lines):
+            if re.search(rex, lines[i]):
+                return i
+    return -1
+
+
+# -----------------------------------------------------------------------------
+def get_owner(owner):
+    """
+    Get owner's title
+
+    Arguments:
+        owner (str): Owner's name of alias or list of owners separated
+            by comma.
+
+    Returns:
+        str: Owner's title.
+    """
+    if owner.lower() in 'all':
+        return get_owner('cea,edf,occ')
+
+    owners = [i.strip() for i in owner.split(',')]
+    result = []
+    for i in owners:
+        i = _OWNERS.get(i.lower(), i)
+        if i not in result:
+            result.append(i)
+    return ', '.join(result)
+
+
+# -----------------------------------------------------------------------------
+def get_comment(file_format):
+    """
+    Get comment for given format.
+
+    Arguments:
+        format (str): Format of comments.
+
+    Returns:
+        str: Comment signature for given format; *None* for unsupported
+        format.
+    """
+    return _COMMENTS.get(file_format) if file_format else None
+
+
+# -----------------------------------------------------------------------------
+def get_copyright(comment, owner, year):
+    """
+    Generate copyright from template.
+
+    Arguments:
+        comment (str): Comment signature.
+        owner (str): Copyright owner.
+        year (str): Copyright year(s).
+
+    Returns:
+        list[str]: List of strings with copyright data.
+    """
+    template = os.path.join(os.path.dirname(sys.argv[0]), 'copyright.template')
+    the_copyright = []
+    try:
+        with open(template) as fid:
+            the_copyright = fid.readlines()
+    except IOError:
+        error_exit("cannot find copyright template")
+    the_copyright = [i.replace('@year@', year) for i in the_copyright]
+    the_copyright = [i.replace('@owner@', owner) for i in the_copyright]
+    the_copyright = [comment + ' ' + i if i.strip() else comment + '\n'
+                     for i in the_copyright]
+    return the_copyright
+
+
+# -----------------------------------------------------------------------------
+def get_module_owner(module):
+    """
+    Get owner of given module.
+
+    Arguments:
+        module (str): Module name.
+
+    Returns:
+        str: Module's owner.
+    """
+    modules_info = os.path.join(os.path.dirname(sys.argv[0]), 'modules.info')
+    owner = None
+    try:
+        with open(modules_info) as fid:
+            lines = fid.readlines()
+            index = search_line(lines, r'^{}:'.format(module), -1)
+            if index >= 0:
+                return get_owner(lines[index].split(":")[1].strip())
+    except IOError:
+        warning("cannot find modules info file")
+    return owner
+
+
+# -----------------------------------------------------------------------------
+def autodetect_owner(filename):
+    """
+    Auto-detect owner from file path.
+
+    Arguments:
+        filename (str): File path.
+
+    Returns:
+        str: Owner; *None* if owner isn't detected.
+    """
+    filename = os.path.realpath(filename)
+    if os.path.exists(filename):
+        directory = os.path.dirname(filename)
+        while directory != '/':
+            config_file = os.path.join(directory, '.git', 'config')
+            if os.path.exists(config_file):
+                try:
+                    from ConfigParser import ConfigParser
+                except ImportError:
+                    from configparser import ConfigParser
+                try:
+                    from StringIO import StringIO
+                except ImportError:
+                    from io import StringIO
+                with open(config_file) as fid:
+                    gitcfg = fid.readlines()
+                    cfg = ConfigParser()
+                    data = StringIO(''.join([l.lstrip() for l in gitcfg]))
+                    cfg.readfp(data)
+                    url = cfg.get('remote "origin"', 'url')
+                    module = os.path.split(url)[-1]
+                    if module.endswith('.git'):
+                        module = module[:-4]
+                    return get_module_owner(module)
+                break
+            directory = os.path.dirname(directory)
+    return None
+
+
+# -----------------------------------------------------------------------------
+def autodetect_format(filename):
+    """
+    Auto-detect format from filename.
+
+    Arguments:
+        filename (str): File path.
+
+    Returns:
+        str: Format of comments; *None* if format isn't detected.
+    """
+    extensions = {
+        'cpp': ('c', 'cpp', 'cxx', 'cc', 'c++',
+                'h', 'hxx', 'hpp', 'hh', 'h++',
+                'idl', 'i'),
+        'shell': ('sh', 'bash', 'csh', 'cmake', 'txt', 'cfg', 'ini', 'm4'),
+        'python': ('py',),
+        }
+    rev_extensions = {e: k for k, exts in extensions.items() for e in exts}
+    if filename and os.path.isfile(filename):
+        extension = os.path.splitext(filename)[1][1:].lower()
+        if extension in ('in',):
+            name = os.path.splitext(filename)[0]
+            extension = os.path.splitext(name)[1][1:].lower()
+        if extension in rev_extensions:
+            return rev_extensions[extension]
+
+    try:
+        import magic
+        m = magic.open(magic.MAGIC_MIME_TYPE)
+        m.load()
+        file_formats = {
+            'cpp': ('text/x-c', 'text/x-c++'),
+            'shell': ('text/x-shellscript',),
+            'python': ('text/x-python',),
+            }
+        rev_file_formats = {f: k for k, ff in file_formats.items() for f in ff}
+        file_format = m.file(filename)
+        if file_format in rev_file_formats:
+            return rev_file_formats[file_format]
+    except ImportError:
+        pass
+
+    return None
+
+
+# -----------------------------------------------------------------------------
+def insert_copyright(filename, owner, year, file_format):
+    """
+    Insert copyright note to a file.
+
+    Arguments:
+        filename (str): File path.
+        owner (str): Copyright owner.
+        year (str): Copyright year(s).
+        file_format (str): Format of comments.
+    """
+    try:
+        with open(filename) as fid:
+            lines = fid.readlines()
+    except IOError:
+        warning("cannot read file: {}".format(filename))
+        return
+
+    if file_format in ('auto',):
+        file_format = autodetect_format(filename)
+
+    if owner.lower() in ('auto',):
+        owner = autodetect_owner(filename) or get_owner('all')
+    else:
+        owner = get_owner(owner)
+
+    comment = get_comment(file_format)
+    if comment is None:
+        warning("cannot detect format")
+        return
+
+    shell_row = search_line(lines, r'^#!') \
+        if file_format in ('sh', 'bash', 'csh', 'py', 'python') else -1
+    coding_row = search_line(lines, r'coding:', 3) \
+        if file_format in ('py', 'python') else -1
+    insert_point = max(0, shell_row + 1, coding_row + 1)
+
+    the_copyright = get_copyright(comment, owner, year)
+    if the_copyright:
+        lines = lines[:insert_point] + the_copyright + ['\n'] \
+            + lines[insert_point:]
+        try:
+            with open(filename, 'w') as fid:
+                for line in lines:
+                    fid.write(line)
+        except IOError:
+            warning("cannot write file: {}".format(filename))
+            return
+
+
+# -----------------------------------------------------------------------------
+def main():
+    """Main function."""
+
+    # Parse command line.
+    description = "Command line tool to insert copyright notice to a file."
+    parser = argparse.ArgumentParser(description=description)
+
+    help_string = "copyright owner; if not specified, tool tries to " \
+        "autodetect an owner from the file path; if auto-detection fails, " \
+        "an owner is set to '{owner}'"
+    owner = 'auto'
+    parser.add_argument("-o", "--owner", action="store",
+                        dest="owner", default=owner,
+                        help=help_string.format(owner=get_owner('all')))
+    help_string = "copyright year(s); default: current year ({year})"
+    year = str(time.localtime().tm_year)
+    parser.add_argument("-y", "--year", action="store",
+                        dest="year", default=year,
+                        help=help_string.format(year=year))
+    help_string = "format of comments ({choices}); default: {file_format}"
+    file_format = 'auto'
+    parser.add_argument("-f", "--format", action="store", choices=formats(),
+                        dest="format", default=file_format,
+                        help=help_string.format(file_format=file_format,
+                                                choices="|".join(formats())))
+    parser.add_argument('files', nargs='+', metavar='FILE')
+
+    args = parser.parse_args(sys.argv[1:])
+
+    owner = args.owner
+    year = args.year
+    file_format = args.format
+    files = args.files
+
+    for filename in files:
+        insert_copyright(filename, owner, year, file_format)
+
+    return 0
+
+# -----------------------------------------------------------------------------
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,43 @@
+# Copyright (C) 2013-2016  CEA/DEN, EDF R&D, OPEN CASCADE
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
+#
+# See http://www.salome-platform.org/ or email : webmaster.salome@opencascade.com
+#
+# Author: Adrien Bruneton
+#
+
+# OpenCV detection for Salome
+#
+#  !! Please read the generic detection procedure in SalomeMacros.cmake !!
+#
+SET(UpCount 2)
+
+IF (WIN32)
+  SET(UpCount 0)
+ENDIF (WIN32)
+
+SALOME_FIND_PACKAGE_AND_DETECT_CONFLICTS(OpenCV OpenCV_DIR ${UpCount})
+
+IF(OpenCV_FOUND) 
+  SALOME_ACCUMULATE_ENVIRONMENT(LD_LIBRARY_PATH ${OpenCV_LIBRARIES})
+  IF(NOT OPENCV_INCLUDE_DIR AND OpenCV_INCLUDE_DIRS)
+    SET(OPENCV_INCLUDE_DIR ${OpenCV_INCLUDE_DIRS})
+  ENDIF()
+  MARK_AS_ADVANCED(FORCE OPENCV_INCLUDE_DIR OpenCV_LIBRARIES)
+  # RNV: Why opencv-2.4.13.5 stores *_FOUND variables into CACHE ???
+  UNSET(OpenCV_FOUND CACHE)
+  UNSET(OPENCV_FOUND CACHE)
+ENDIF()
